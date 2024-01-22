@@ -1,6 +1,6 @@
 rootProject.name = "storage"
 
-arrayOf("api", "api-codec", "caffeine-dist", "mongo-legacy-dist", "redis-dist", "gson-dist").forEach {
+arrayOf("api", "api-codec", "caffeine-dist", "mongo-legacy-dist", "redis-dist", "gson-dist", "hikaricp-dist").forEach {
   includePrefixed(it)
 }
 
