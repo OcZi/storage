@@ -13,15 +13,13 @@ public interface SQLDialect {
 
   String selectAll(String tableName);
 
-  String selectWhere(String tableName, LogicOperand operand);
-
   default String selectRow(TableStructure structure) {
     return this.selectRow(structure.tableName(), structure.id());
   }
 
   String selectRow(String tableName, String id);
 
-  String selectRowWhere(String tableName, String id, String where, String value);
+  String selectRowWhere(String tableName, String id, String where);
 
   default String insertInto(TableStructure structure) {
     return this.insertInto(structure.tableName(), structure.columns());

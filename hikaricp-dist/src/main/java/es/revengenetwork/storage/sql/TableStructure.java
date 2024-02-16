@@ -39,8 +39,6 @@ public interface TableStructure {
              .collect(Collectors.joining(", "));
   }
 
-  boolean matchContent(JsonObject model);
-
   default String[] columns() {
     return this.content().keySet()
              .toArray(new String[0]);

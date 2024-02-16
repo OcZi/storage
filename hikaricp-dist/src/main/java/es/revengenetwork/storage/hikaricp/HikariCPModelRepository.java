@@ -1,6 +1,7 @@
 package es.revengenetwork.storage.hikaricp;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.zaxxer.hikari.HikariDataSource;
 import es.revengenetwork.storage.codec.ModelDeserializer;
@@ -16,6 +17,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -56,9 +58,10 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
 
   @Override
   public @Nullable ModelType findSync(final @NotNull String id) {
-    return this.deserializer.deserialize(this.queryModel(
+    final JsonObject serialized = this.queryModel(
       this.dialect.selectRow(this.table),
-      id));
+      id);
+    return serialized.entrySet().isEmpty() ? null : this.deserializer.deserialize(serialized);
   }
 
   @Override
@@ -69,8 +72,8 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
   ) {
     final AtomicReference<C> reference = new AtomicReference<>();
     this.query(
-      this.dialect.selectWhere(this.table.tableName(), LogicOperand.of(field)),
-      statement -> statement.setObject(0, value),
+      this.dialect.selectRow(this.table.tableName(), field),
+      statement -> statement.setObject(1, value),
       this.deserializeAll(reference, factory));
     return reference.get();
   }
@@ -122,14 +125,14 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
   public boolean existsSync(final @NotNull String id) {
     final AtomicBoolean exists = new AtomicBoolean();
     this.query(this.dialect.selectRow(this.table),
-          statement -> statement.setObject(0, id),
+          statement -> statement.setObject(1, id),
           resultSet -> exists.set(resultSet.next())
     );
     return exists.get();
   }
 
   @Override
-  public ModelType saveSync(final ModelType model) {
+  public ModelType saveSync(final @NotNull ModelType model) {
     this.runUpdate(
       this.dialect.insertInto(this.table),
       statement -> this.serialize(statement, model));
@@ -140,7 +143,7 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
   public boolean deleteSync(final @NotNull String id) {
     return this.runUpdate(
       this.dialect.deleteRow(this.table),
-      statement -> statement.setObject(0, id)) > 0;
+      statement -> statement.setObject(1, id)) > 0;
   }
 
   private void query(
@@ -158,6 +161,7 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
         resultSetConsumer.accept(result);
       }
     } catch (final SQLException e) {
+      e.printStackTrace();
       throw new RuntimeException(e);
     }
   }
@@ -166,16 +170,29 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
     final JsonObject jsonObject = new JsonObject();
     this.query(
       expression,
-      statement -> statement.setObject(0, id),
-      resultSet -> this.deserializeJson(resultSet, jsonObject));
+      statement -> statement.setObject(1, id),
+      resultSet -> {
+        int i = 0;
+        while (resultSet.next()) {
+          if (i > 0) {
+            throw new SQLException("Unexpected behaviour: more than a row returned in a single query row");
+          }
+
+          this.deserializeJson(resultSet, jsonObject);
+          ++i;
+        }
+      });
     return jsonObject;
   }
 
   private void deserializeJson(final ResultSet result, final JsonObject serialized) throws SQLException {
     final String[] columns = this.table.columns();
-    for (int i = 0; result.next(); i++) {
+    final int columnCount = result.getMetaData().getColumnCount();
+    for (int i = 0; i < columnCount; i++) {
+      final Object object = result.getObject(i + 1);
+      final JsonElement jsonTree = this.gson.toJsonTree(object);
       serialized.add(
-        columns[i], this.gson.toJsonTree(result.getObject(i))
+        columns[i].toLowerCase(), jsonTree
       );
     }
   }
@@ -184,7 +201,8 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
     final String[] columns = this.table.columns();
     final JsonObject serialize = this.serializer.serialize(type);
     for (int i = 0; i < columns.length; i++) {
-      statement.setObject(i, serialize.get(columns[i]));
+      final JsonElement x = serialize.get(columns[i].toLowerCase());
+      statement.setObject(i + 1, x.getAsString());
     }
   }
 
@@ -196,6 +214,7 @@ public class HikariCPModelRepository<ModelType extends Model> extends AbstractAs
       consumer.accept(statement);
       return statement.executeUpdate();
     } catch (final SQLException e) {
+      e.printStackTrace();
       throw new RuntimeException(e);
     }
   }

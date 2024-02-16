@@ -15,18 +15,14 @@ public class MySQLDialect implements SQLDialect {
   }
 
   @Override
-  public String selectWhere(final String tableName, final LogicOperand operand) {
-    return "SELECT * FROM %s WHERE %s;".formatted(tableName, operand.build());
-  }
-
-  @Override
   public String selectRow(final String tableName, final String idColumn) {
     return "SELECT * FROM %s WHERE %s = ?;".formatted(tableName, idColumn);
   }
 
   @Override
-  public String selectRowWhere(final String tableName, final String id, final String where, final String value) {
-    return "SELECT * FROM %s WHERE %s = ?, %s = ?;";
+  public String selectRowWhere(final String tableName, final String id, final String where) {
+    return "SELECT * FROM %s WHERE %s = ? AND %s = ?;"
+             .formatted(tableName, id, where);
   }
 
   @Override
@@ -57,7 +53,7 @@ public class MySQLDialect implements SQLDialect {
 
   @Override
   public String createTable(final TableStructure structure) {
-    return "CREATE IF NOT EXISTS %s VALUES (%s);"
+    return "CREATE TABLE IF NOT EXISTS %s (%s);"
              .formatted(structure.tableName(), structure.tableValues());
   }
 
